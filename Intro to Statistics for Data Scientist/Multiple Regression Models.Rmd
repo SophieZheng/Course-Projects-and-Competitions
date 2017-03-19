@@ -1,0 +1,173 @@
+---
+title: "Introduction to Statistics Project"
+author: "Sophie Zheng"
+date: "July 27, 2016"
+output: pdf_document
+---
+
+```{r, echo=FALSE}
+
+#Loans_path <- file.path(getwd(), "LoanStats3a.csv")
+#Loans_path
+
+dir = "/Users/SophieZheng/Downloads"
+setwd(dir)
+
+library(readxl)
+#library(readr)
+#library("data.table")
+
+Loan <- read.csv(file="loan_10000.csv",head=TRUE,sep=",")
+#Loan <- read_excel("LoanStats3b.xlsx",col_names = TRUE)
+
+# Empty columns contain NAs only or ""s only, they have has no variability. This code removes all columns without variability (which is probably a plus in this case).
+Loan <- Loan[!sapply(Loan, function(var) (length(unique(var)) == 1))]
+
+Loan <- na.omit(Loan)
+
+# Get first 2000 rows
+#Loan <- Loan[c(1:2000),]
+
+# Remove 'xx' from zip code end
+Loan$zip_new <- gsub("xx","",Loan$zip_code)
+
+```
+
+# Model 1
+
+```{r}
+
+model <- lm(formula= int_rate ~  loan_amnt + revol_util + dti + tot_cur_bal +
+              tot_hi_cred_lim + home_ownership + total_bc_limit + term +
+              percent_bc_gt_75 + purpose + installment, data = Loan)
+
+summary(model)
+
+```
+
+Testing the assumptions
+
+home_ownership, term and purpose are categorical string variables
+Hence removed those in checks for collinearity
+
+```{r}
+
+pairs(~int_rate + loan_amnt + revol_util + dti + tot_cur_bal + tot_hi_cred_lim +
+        total_bc_limit + installment + percent_bc_gt_75, data = Loan)
+
+cor(Loan[,c("loan_amnt","revol_util","dti","tot_cur_bal","tot_hi_cred_lim","total_bc_limit","installment","percent_bc_gt_75")])
+
+```
+
+'tot_cur_bal' is highly collinear with 'tot_hi_cred_lim'
+
+Hence removing 'tot_cur_bal' (Since it has higher p-value among both).
+
+'Installment' is highly collinear with 'loan_amnt' so removing installment as well.
+Plus installment does not make logical sense since it is derived in part from interest rate.
+
+# Model 2
+
+```{r}
+
+Loan$homeF <- factor(Loan$home_ownership)
+Loan <- within(Loan,homeF <- relevel(homeF, ref="RENT"))
+
+model <- lm(formula= int_rate ~  loan_amnt + revol_util + dti + tot_hi_cred_lim +
+            homeF + total_bc_limit + term + percent_bc_gt_75 + purpose, data = Loan)
+
+summary(model)
+
+```
+
+Check for Standardized residuals
+
+```{r}
+
+model.stres <- rstandard(model)
+plot(model$fitted.values, model.stres, pch = 16, main = "Standardized Residual Plot",
+     xlab = "Fitted Interest Rate", ylab = "Standardized Residuals")
+abline(0,0, lty=2, col="red")
+
+```
+
+Check for normality 
+
+```{r}
+
+hist(model.stres)
+# x <- model.stres
+# xfit <- seq(min(x), max(x), length = 50)
+# yfit <- dnorm(xfit, mean = mean(x), sd = sd(x))
+# yfit <- yfit*diff(h$mids[1:2])*length(x)
+# lines(xfit, yfit, col="blue")
+
+qqnorm(model.stres)
+qqline(model.stres,col="red")
+
+
+#shapiro.test(model.stres)
+
+```
+
+# Model 3
+
+After changing home_ownership to factors the other variables become insignificant. 
+Removing home_ownership.
+
+```{r}
+
+Loan$homeF <- factor(Loan$home_ownership)
+Loan <- within(Loan,homeF <- relevel(homeF, ref="RENT"))
+
+model <- lm(formula= int_rate ~  loan_amnt + revol_util + dti + tot_hi_cred_lim +
+              total_bc_limit + term + percent_bc_gt_75 + purpose, data = Loan)
+
+summary(model)
+
+```
+
+# Model 4
+
+Removing purpose as many of the variables are insignificant.
+loan_amnt becomes insignificant in the above model. 
+Since the scale is too high. Taking log of loan_amnt and using it in the model.
+
+```{r}
+
+model <- lm(formula= int_rate ~  log(loan_amnt) + revol_util + dti + 
+            tot_hi_cred_lim +  total_bc_limit + term + percent_bc_gt_75, 
+            data = Loan)
+
+summary(model)
+
+```
+
+# Model 5
+
+```{r}
+
+attach(Loan)
+
+model <- lm(formula= int_rate ~  log(loan_amnt) + revol_util + dti + 
+            tot_hi_cred_lim +  total_bc_limit + term + percent_bc_gt_75,
+            data = Loan)
+
+summary(model)
+
+```
+
+# Model 6
+
+```{r}
+attach(Loan)
+Loan$purposeF = factor(Loan$purpose)
+Loan = within(Loan, purposeF<-relevel(purposeF,ref="credit_card"))
+              
+model6 <- lm(formula= log(int_rate) ~  log(loan_amnt) + revol_util + dti +
+            log(tot_hi_cred_lim) + log(total_bc_limit) + term +purposeF, data = Loan)
+
+summary(model6)
+```
+
+
